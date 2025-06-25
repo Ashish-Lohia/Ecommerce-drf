@@ -1,11 +1,18 @@
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, Group, Permission
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    PermissionsMixin,
+    BaseUserManager,
+    Group,
+    Permission,
+)
 from django.db import models
 from ecommerce.utils.models import UUID, TimeStampModel
 
+
 class UserManager(BaseUserManager):
-    def create_user(self, email, password=None, role='buyer', **extra_fields):
+    def create_user(self, email, password=None, role="buyer", **extra_fields):
         if not email:
-            raise ValueError('Email is required for creating the user Profile')
+            raise ValueError("Email is required for creating the user Profile")
         email = self.normalize_email(email)
         user = self.model(email=email, role=role, **extra_fields)
         user.set_password(password)
@@ -13,21 +20,22 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        return self.create_user(email, password, role='admin', **extra_fields)
-    
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return self.create_user(email, password, role="superadmin", **extra_fields)
 
-class User( AbstractBaseUser, PermissionsMixin, UUID, TimeStampModel):
+
+class User(AbstractBaseUser, PermissionsMixin, UUID, TimeStampModel):
     role_choices = (
-        ('buyer', 'Buyer'),
-        ('seller', 'Seller'),
-        ('admin', 'Admin'),
+        ("buyer", "Buyer"),
+        ("seller", "Seller"),
+        ("admin", "Admin"),
+        ("superadmin", "Superadmin"),
     )
 
     fullname = models.CharField(max_length=50)
     email = models.EmailField(unique=True)
-    role = models.CharField(max_length=10, choices=role_choices, default='buyer')
+    role = models.CharField(max_length=10, choices=role_choices, default="buyer")
     phoneNo = models.CharField(max_length=10, blank=True, null=True)
     profilePic = models.URLField(max_length=200, blank=True, null=True)
     is_active = models.BooleanField(default=True)
@@ -35,8 +43,8 @@ class User( AbstractBaseUser, PermissionsMixin, UUID, TimeStampModel):
 
     objects = UserManager()
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['fullname']
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["fullname"]
 
     groups = models.ManyToManyField(
         Group,
@@ -54,5 +62,4 @@ class User( AbstractBaseUser, PermissionsMixin, UUID, TimeStampModel):
     )
 
     def __str__(self):
-        return f'{self.email}, ({self.role})'
-
+        return f"{self.email}, ({self.role})"

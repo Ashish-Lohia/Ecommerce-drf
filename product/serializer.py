@@ -1,56 +1,56 @@
 from rest_framework import serializers
-from .models import ProductImage, Product, Category, Size, Brand
+from .models import ProductMedia, Product, Category, Size, Brand, BrandCategory
 
 
-class CreateProductImageSerializer(serializers.ModelSerializer):
+class CreateProductMediaSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ProductImage
-        fields = ["image_url"]
+        model = ProductMedia
+        fields = ["type", "url"]
 
 
 class CreateCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ["name"]
+        fields = ["name", "parent"]
 
 
 class CreateSizeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Size
-        fields = ["name"]
+        fields = ["name", "category", "brand"]
 
 
 class CreateBrandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Brand
-        fields = ["id", "name", "logo"]
+        fields = ["id", "name", "logo", "website"]
 
 
 class CreateProductSerializer(serializers.ModelSerializer):
-    images = CreateProductImageSerializer(many=True, write_only=True)
+    multimedia = CreateProductMediaSerializer(many=True, write_only=True)
 
     class Meta:
         model = Product
         fields = [
             "name",
-            "description",
+            "desp",
             "price",
             "stock",
-            "isArchived",
+            "is_archived",
             "category",
             "size",
             "brand",
-            "images",
+            "multimedia",
         ]
 
-    def validate_images(self, value):
+    def validate_multimedia(self, value):
         if len(value) > 10:
-            raise serializers.ValidationError("A maximum of 10 images are allowed.")
+            raise serializers.ValidationError("A maximum of 10 files are allowed.")
         return value
 
     def create(self, validated_data):
-        images_data = validated_data.pop("images", [])
+        multimedia_data = validated_data.pop("multimedia", [])
         product = Product.objects.create(**validated_data)
-        for image_data in images_data:
-            ProductImage.objects.create(product=product, **image_data)
+        for url in multimedia_data:
+            ProductMedia.objects.create(product=product, **url)
         return product

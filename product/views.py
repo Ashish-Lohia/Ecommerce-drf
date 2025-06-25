@@ -4,11 +4,11 @@ from rest_framework.views import APIView
 from .serializer import (
     CreateBrandSerializer,
     CreateCategorySerializer,
-    CreateProductImageSerializer,
+    CreateProductMediaSerializer,
     CreateProductSerializer,
     CreateSizeSerializer,
 )
-from .models import Product, ProductImage, Category, Brand, Size
+from .models import Product, ProductMedia, Category, Brand, Size
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404

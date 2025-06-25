@@ -137,9 +137,11 @@ class UserChangeRoleView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user.role = role
-        if role == "admin":
+        if role == "superadmin":
             user.is_staff = True
             user.is_superuser = True
+        elif role == "admin":
+            user.is_staff = True
         else:
             user.is_superuser = False
             user.is_staff = False
