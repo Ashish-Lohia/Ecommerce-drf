@@ -1,12 +1,20 @@
-from django.urls import path
-from .views import BrandView, UpdatedeleteBrandView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    BrandCategoryViewSet,
+    BrandViewSet,
+    CategoryViewSet,
+    SizeViewSet,
+    ProductViewSet,
+)
 
+router = DefaultRouter()
+router.register(r"brands", BrandViewSet)
+router.register(r"categories", CategoryViewSet)
+router.register(r"brand-categories", BrandCategoryViewSet)
+router.register(r"sizes", SizeViewSet)
+router.register(r"products", ProductViewSet)
 
 urlpatterns = [
-    path("brand/", BrandView.as_view(), name="Create and get Brands"),
-    path(
-        "brand/<uuid:pk>/",
-        UpdatedeleteBrandView.as_view(),
-        name="Update and Delete Brand",
-    ),
+    path("", include(router.urls)),
 ]

@@ -34,7 +34,9 @@ class Order(UUID, TimeStampModel):
     base_amount = models.DecimalField(max_digits=10, decimal_places=2)
     convenience_fee = models.DecimalField(max_digits=10, decimal_places=2)
     delivery_fee = models.DecimalField(max_digits=10, decimal_places=2)
-    discount = models.DecimalField(max_digits=10, decimal_places=2)
+    discount = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True
+    )
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     coupons = models.ForeignKey(
         Coupon, on_delete=models.SET_NULL, related_name="orders", blank=True, null=True
