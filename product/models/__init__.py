@@ -4,3 +4,4 @@ from .product import Product
 from .category import Category
 from .productMedia import ProductMedia
 from .size import Size
+from .processedProductMedia import ProcessedProductMedia

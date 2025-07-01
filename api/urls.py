@@ -11,4 +11,5 @@ urlpatterns = [
     path("", include("disputes.urls")),
     path("", include("transaction.urls")),
     path("", include("review.urls")),
+    path("", include("notification.urls")),
 ]

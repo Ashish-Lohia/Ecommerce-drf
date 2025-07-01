@@ -72,3 +72,21 @@ class OrderItem(UUID, TimeStampModel):
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name} in order {self.order.id}"
+
+
+class OrderStatusHistory(UUID, TimeStampModel):
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="status_history"
+    )
+    previous_status = models.CharField(max_length=50, blank=True, null=True)
+    new_status = models.CharField(max_length=50)
+    changed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    remarks = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Order {self.order.id}: {self.previous_status} -> {self.new_status}"
+
+    class Meta:
+        ordering = ["-created_at"]

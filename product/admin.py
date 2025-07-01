@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import product, productMedia, category, brand, size, brand_category
+from .models import (
+    product,
+    productMedia,
+    category,
+    brand,
+    size,
+    brand_category,
+    processedProductMedia,
+)
 
 
 class ProductMediaInline(admin.TabularInline):
@@ -147,3 +155,4 @@ admin.site.register(category.Category, CategoryAdmin)
 admin.site.register(brand.Brand, BrandAdmin)
 admin.site.register(size.Size, SizeAdmin)
 admin.site.register(brand_category.BrandCategory, BrandCategoryAdmin)
+admin.site.register(processedProductMedia.ProcessedProductMedia)
