@@ -55,6 +55,13 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response({"success": True, "data": response.data})
 
     def retrieve(self, request, *args, **kwargs):
+        self.queryset = (
+            self.get_queryset()
+            .select_related("user", "coupon")
+            .prefetch_related(
+                "order_items", "order_items__product", "order_items__product__brand"
+            )
+        )
         response = super().retrieve(request, *args, **kwargs)
         return Response({"success": True, "data": response.data})
 

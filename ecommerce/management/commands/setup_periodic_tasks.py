@@ -1,3 +1,4 @@
+import json
 from django.core.management.base import BaseCommand
 from django_celery_beat.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 
@@ -6,10 +7,9 @@ class Command(BaseCommand):
     help = "Setup periodic tasks for ecommerce automation"
 
     def handle(self, *args, **options):
-        # Create schedules
         daily_midnight, _ = CrontabSchedule.objects.get_or_create(
-            minute=0,
-            hour=0,
+            minute="0",
+            hour="0",
             day_of_week="*",
             day_of_month="*",
             month_of_year="*",
@@ -22,6 +22,11 @@ class Command(BaseCommand):
 
         every_30_minutes, _ = IntervalSchedule.objects.get_or_create(
             every=30,
+            period=IntervalSchedule.MINUTES,
+        )
+
+        every_1_minute, _ = IntervalSchedule.objects.get_or_create(
+            every=1,
             period=IntervalSchedule.MINUTES,
         )
 
@@ -39,7 +44,7 @@ class Command(BaseCommand):
             {
                 "name": "Generate Sales Analytics",
                 "task": "ecommerce.tasks.generate_sales_analytics",
-                "schedule": daily_midnight,
+                "schedule": every_1_minute,
             },
             {
                 "name": "Cleanup Old Notifications",
@@ -51,30 +56,51 @@ class Command(BaseCommand):
                 "task": "ecommerce.tasks.update_coupon_usage_stats",
                 "schedule": every_30_minutes,
             },
+            {
+                "name": "Archive Out of Stock Products",
+                "task": "ecommerce.tasks.archive_out_of_stock_products",
+                "schedule": daily_midnight,
+            },
+            {
+                "name": "Remind Inactive Users",
+                "task": "ecommerce.tasks.remind_inactive_users",
+                "schedule": daily_midnight,
+            },
         ]
 
         for task_config in tasks:
+            schedule = task_config["schedule"]
+
+            schedule_kwargs = {
+                "crontab": schedule if isinstance(schedule, CrontabSchedule) else None,
+                "interval": (
+                    schedule if isinstance(schedule, IntervalSchedule) else None
+                ),
+            }
+
             task, created = PeriodicTask.objects.get_or_create(
                 name=task_config["name"],
                 defaults={
                     "task": task_config["task"],
-                    "crontab": (
-                        task_config.get("schedule")
-                        if isinstance(task_config["schedule"], CrontabSchedule)
-                        else None
-                    ),
-                    "interval": (
-                        task_config.get("schedule")
-                        if isinstance(task_config["schedule"], IntervalSchedule)
-                        else None
-                    ),
+                    **schedule_kwargs,
                     "enabled": True,
                 },
             )
 
-            status = "Created" if created else "Updated"
+            if not created:
+                task.task = task_config["task"]
+                task.crontab = schedule_kwargs["crontab"]
+                task.interval = schedule_kwargs["interval"]
+                task.enabled = True
+                task.save()
+                status = "Updated"
+            else:
+                status = "Created"
+
             self.stdout.write(
                 self.style.SUCCESS(f'{status} periodic task: {task_config["name"]}')
             )
 
-        self.stdout.write(self.style.SUCCESS("Successfully setup all periodic tasks!"))
+        self.stdout.write(
+            self.style.SUCCESS("✅ Successfully setup all periodic tasks!")
+        )

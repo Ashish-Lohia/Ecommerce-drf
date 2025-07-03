@@ -13,81 +13,85 @@ from users.models import User
 from product.models import Product, ProductMedia, ProcessedProductMedia
 from orders.models import Order
 from coupons.models import Coupon
-
 from notification.models import Notification
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, max_retries=3)
 def process_product_media(self, media_id):
     """Process product images/videos - resize, optimize, create thumbnails"""
+    processed_media = None
+
     try:
         media = ProductMedia.objects.get(id=media_id)
-        processed_media, created = ProcessedProductMedia.objects.get_or_create(
+        processed_media, _ = ProcessedProductMedia.objects.get_or_create(
             original_media=media, defaults={"processing_status": "processing"}
         )
 
         if media.type == "image":
-            # Download image from URL
-            response = requests.get(media.url)
-            if response.status_code == 200:
-                with tempfile.NamedTemporaryFile() as temp_file:
-                    temp_file.write(response.content)
-                    temp_file.flush()
-
-                    # Process image
-                    with Image.open(temp_file.name) as img:
-                        # Create main processed image (max 1200x1200)
-                        img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
-
-                        # Save processed image
-                        processed_path = (
-                            f"processed/products/{media.product.id}_{media.id}_main.jpg"
-                        )
-                        with tempfile.NamedTemporaryFile(
-                            suffix=".jpg"
-                        ) as processed_temp:
-                            img.save(
-                                processed_temp.name, "JPEG", quality=85, optimize=True
-                            )
-                            processed_temp.seek(0)
-
-                            # Upload to storage (local or cloud)
-                            saved_path = default_storage.save(
-                                processed_path, processed_temp
-                            )
-                            processed_media.processed_url = default_storage.url(
-                                saved_path
-                            )
-
-                        # Create thumbnail (300x300)
-                        img.thumbnail((300, 300), Image.Resampling.LANCZOS)
-                        thumbnail_path = f"processed/products/{media.product.id}_{media.id}_thumb.jpg"
-                        with tempfile.NamedTemporaryFile(suffix=".jpg") as thumb_temp:
-                            img.save(thumb_temp.name, "JPEG", quality=75, optimize=True)
-                            thumb_temp.seek(0)
-
-                            saved_thumb_path = default_storage.save(
-                                thumbnail_path, thumb_temp
-                            )
-                            processed_media.thumbnail_url = default_storage.url(
-                                saved_thumb_path
-                            )
-
-                        processed_media.processing_status = "completed"
-                        processed_media.file_size = os.path.getsize(temp_file.name)
-                        processed_media.save()
-
-                        return f"Successfully processed image for product {media.product.name}"
-            else:
+            response = requests.get(media.url, timeout=10)
+            if response.status_code != 200:
                 processed_media.processing_status = "failed"
                 processed_media.save()
                 return f"Failed to download image: {response.status_code}"
 
+            with tempfile.NamedTemporaryFile() as temp_file:
+                temp_file.write(response.content)
+                temp_file.flush()
+
+                with Image.open(temp_file.name) as img:
+                    # Create main processed image
+                    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+                    processed_path = (
+                        f"processed/products/{media.product.id}_{media.id}_main.jpg"
+                    )
+                    with tempfile.NamedTemporaryFile(suffix=".jpg") as processed_temp:
+                        img.save(processed_temp.name, "JPEG", quality=85, optimize=True)
+                        processed_temp.seek(0)
+                        saved_path = default_storage.save(
+                            processed_path, processed_temp
+                        )
+                        processed_media.processed_url = default_storage.url(saved_path)
+
+                    # Create thumbnail
+                    img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                    thumbnail_path = (
+                        f"processed/products/{media.product.id}_{media.id}_thumb.jpg"
+                    )
+                    with tempfile.NamedTemporaryFile(suffix=".jpg") as thumb_temp:
+                        img.save(thumb_temp.name, "JPEG", quality=75, optimize=True)
+                        thumb_temp.seek(0)
+                        saved_thumb_path = default_storage.save(
+                            thumbnail_path, thumb_temp
+                        )
+                        processed_media.thumbnail_url = default_storage.url(
+                            saved_thumb_path
+                        )
+
+                    processed_media.processing_status = "completed"
+                    processed_media.file_size = os.path.getsize(temp_file.name)
+                    processed_media.save()
+                    return (
+                        f"Successfully processed image for product {media.product.name}"
+                    )
+
+    except ProductMedia.DoesNotExist:
+        return f"ProductMedia with ID {media_id} not found."
+
+    except requests.exceptions.RequestException as e:
+        # Retry network-related errors
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e, countdown=60)
+        else:
+            if processed_media:
+                processed_media.processing_status = "failed"
+                processed_media.save()
+            return f"Network error and max retries exceeded: {str(e)}"
+
     except Exception as e:
-        processed_media.processing_status = "failed"
-        processed_media.save()
-        self.retry(countdown=60, max_retries=3)
-        return f"Error processing media: {str(e)}"
+        if processed_media:
+            processed_media.processing_status = "failed"
+            processed_media.save()
+        raise self.retry(exc=e, countdown=60)
 
 
 @shared_task
@@ -351,3 +355,63 @@ def process_bulk_product_updates():
         return "Bulk update functionality would be implemented here"
     except Exception as e:
         return f"Error with bulk updates: {str(e)}"
+
+
+@shared_task
+def archive_out_of_stock_products():
+    products = Product.objects.filter(stock=0, is_archived=False)
+    count = products.update(is_archived=True)
+    return f"Archived {count} out-of-stock products"
+
+
+@shared_task
+def remind_inactive_users():
+    cutoff = timezone.now() - timezone.timedelta(days=30)
+    inactive_users = User.objects.filter(last_login__lt=cutoff, is_active=True)
+
+    email_count = 0
+    for user in inactive_users:
+        send_websocket_notification.delay(
+            user.id,
+            {
+                "title": "We Miss You!",
+                "message": "It’s been a while since your last visit. Check out what’s new!",
+                "notification_type": "system",
+            },
+        )
+
+        try:
+            send_mail(
+                subject="We Miss You at Your Ecommerce Store!",
+                message=f"""
+                Hi {user.fullname},
+
+                It's been a while since you last visited us. We've added new products and offers that we think you'll love!
+
+                Come back and check out what's new 👉 https://your-ecommerce-site.com
+
+                See you soon,
+                Your Ecommerce Team
+                """,
+                from_email="noreply@yourecommerce.com",
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+            email_count += 1
+        except Exception as e:
+            return f"Error sending inactive user email to user {user.id}: {str(e)}"
+
+    return f"Sent {inactive_users.count()} WebSocket reminders and {email_count} emails to inactive users."
+
+
+@shared_task
+def send_welcome_email(user_id):
+    user = User.objects.get(id=user_id)
+    send_mail(
+        "Welcome to Our Store!",
+        f"Hi {user.fullname},\nThanks for signing up!",
+        "ashketchem4663@gmail.com",
+        [user.email],
+        fail_silently=False,
+    )
+    return f"Welcome email sent to {user.email}"

@@ -6,11 +6,13 @@ from django.utils import timezone
 from product.models import ProductMedia
 from orders.models import Order, OrderStatusHistory
 from coupons.models import CouponUser
+from users.models import User
 from ecommerce.tasks import (
     process_product_media,
     send_order_notification_email,
     send_websocket_notification,
     update_coupon_usage_stats,
+    send_welcome_email,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,4 +154,16 @@ def update_coupon_stats_on_use(sender, instance, created, **kwargs):
         except Exception as e:
             logger.error(
                 f"Failed to queue coupon usage stats update for CouponUser {instance.id}: {str(e)}"
+            )
+
+
+@receiver(post_save, sender=User)
+def send_welcome_email_on_registration(sender, instance, created, **kwargs):
+    if created and instance.email:
+        try:
+            send_welcome_email.delay(instance.id)
+            logger.info(f"Email notification queued for welcoming user {instance.id}")
+        except Exception as e:
+            logger.error(
+                f"Failed to queue email notification for welcoming user {instance.id}: {str(e)}"
             )

@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    command: daphne -b 0.0.0.0 -p 8000 ecommerce.asgi:application
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    env_file:
+      - ecommerce/.env
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  celery:
+    build: .
+    command: celery -A ecommerce worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    env_file:
+      - ecommerce/.env
+
+  celery-beat:
+    build: .
+    command: celery -A ecommerce beat --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    env_file:
+      - ecommerce/.env
+
+  flower:
+    build: .
+    command: celery -A ecommerce flower --port=5555
+    ports:
+      - "5555:5555"
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    env_file:
+      - ecommerce/.env
